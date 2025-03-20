@@ -43,6 +43,7 @@ io.on('connection', (socket) => {
     name: `Player ${Object.keys(players).length + 1}`,
     keyPresses: 0,
     balloonSize: 1,
+    finalHeight: 0, // Add a property for final height
   };
 
   // Send current players to the new player
@@ -78,6 +79,7 @@ io.on('connection', (socket) => {
       Object.keys(players).forEach(id => {
         players[id].keyPresses = 0;
         players[id].balloonSize = 1;
+        players[id].finalHeight = 0; // Add a property for final height
       });
       
       gameState.isActive = true;
@@ -89,6 +91,15 @@ io.on('connection', (socket) => {
       setTimeout(() => {
         gameState.isActive = false;
         const winner = findWinner();
+        
+        // Calculate final heights based on key presses (relative to winner)
+        const maxPresses = winner ? winner.keyPresses : 0;
+        Object.keys(players).forEach(id => {
+          // Calculate height based on relative performance
+          const relativePresses = maxPresses > 0 ? players[id].keyPresses / maxPresses : 0;
+          players[id].finalHeight = relativePresses * 20; // Max height is 20 units
+        });
+        
         io.emit('gameEnded', { winner, players });
       }, gameState.duration);
     }

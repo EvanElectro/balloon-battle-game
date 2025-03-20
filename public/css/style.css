@@ -184,4 +184,30 @@ button:hover {
 .player-presses {
   color: #FF5722;
   font-size: 1.1rem;
+}
+
+/* Animation for the winner announcement */
+@keyframes float-up {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-300px); }
+}
+
+@keyframes sway {
+  0% { transform: rotate(-5deg); }
+  50% { transform: rotate(5deg); }
+  100% { transform: rotate(-5deg); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Added for confetti canvas */
+canvas.confetti-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  pointer-events: none;
 } 

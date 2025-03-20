@@ -41,6 +41,9 @@ let scene, camera, renderer;
 let balloons = {};
 let remainingTime = 30;
 let keyStates = {}; // Track key states to prevent holding
+let isEndAnimation = false;
+let endAnimationStartTime = 0;
+let endAnimationDuration = 5000; // 5 seconds for the final animation
 
 // Three.js scene setup
 function setupScene() {
@@ -203,26 +206,68 @@ function updateBalloonSize(playerId, size) {
 function animate() {
   requestAnimationFrame(animate);
   
-  // Update balloon sizes with smooth animation
-  Object.keys(balloons).forEach(playerId => {
-    const balloonData = balloons[playerId];
+  if (isEndAnimation) {
+    // End game animation with floating balloons
+    const progress = Math.min((Date.now() - endAnimationStartTime) / endAnimationDuration, 1);
     
-    // Smoothly interpolate to target scale
-    balloonData.initialScale += (balloonData.targetScale - balloonData.initialScale) * 0.1;
+    Object.keys(balloons).forEach(playerId => {
+      const balloonData = balloons[playerId];
+      const player = players[playerId];
+      
+      if (player && player.finalHeight) {
+        // Balloon movement based on key presses and time
+        const targetHeight = player.finalHeight * progress;
+        
+        // Apply slight random movement for natural floating effect
+        const time = Date.now() * 0.001;
+        const playerId_num = parseInt(playerId.replace(/\D/g,''), 10) || 0;
+        const offset = playerId_num * 0.1;
+        
+        // Position balloon based on animation progress
+        balloonData.balloon.position.y = targetHeight + Math.sin(time + offset) * 0.2;
+        
+        // Add slight swaying
+        balloonData.balloon.rotation.z = Math.sin(time * 0.5 + offset) * 0.1;
+        
+        // Make balloons with fewer presses "pop" and disappear
+        if (progress > 0.4 && player.finalHeight < player.finalHeight * 0.4) {
+          if (balloonData.balloon.visible) {
+            balloonData.balloon.visible = false;
+            // Add a popping sound or effect here if desired
+          }
+        }
+      }
+    });
     
-    // Update balloon scale
-    balloonData.balloon.scale.set(
-      balloonData.initialScale,
-      balloonData.initialScale,
-      balloonData.initialScale
-    );
-    
-    // Gently bob up and down
-    const time = Date.now() * 0.001;
-    const playerId_num = parseInt(playerId.replace(/\D/g,''), 10) || 0;
-    const offset = playerId_num * 0.1;
-    balloonData.balloon.position.y = Math.sin(time + offset) * 0.2;
-  });
+    // Slowly rotate camera around to show all balloons
+    const cameraAngle = progress * Math.PI * 2;
+    const cameraRadius = 15 + progress * 5; // Camera moves slightly out as animation progresses
+    camera.position.x = Math.cos(cameraAngle) * cameraRadius;
+    camera.position.z = Math.sin(cameraAngle) * cameraRadius;
+    camera.position.y = 5 + progress * 5; // Camera moves up slightly
+    camera.lookAt(0, progress * 10, 0); // Look at center, but higher as animation progresses
+  } else {
+    // Normal game animation
+    Object.keys(balloons).forEach(playerId => {
+      const balloonData = balloons[playerId];
+      
+      // Smoothly interpolate to target scale
+      balloonData.initialScale += (balloonData.targetScale - balloonData.initialScale) * 0.1;
+      
+      // Update balloon scale
+      balloonData.balloon.scale.set(
+        balloonData.initialScale,
+        balloonData.initialScale,
+        balloonData.initialScale
+      );
+      
+      // Gently bob up and down
+      const time = Date.now() * 0.001;
+      const playerId_num = parseInt(playerId.replace(/\D/g,''), 10) || 0;
+      const offset = playerId_num * 0.1;
+      balloonData.balloon.position.y = Math.sin(time + offset) * 0.2;
+    });
+  }
   
   // Render the scene
   renderer.render(scene, camera);
@@ -239,42 +284,106 @@ function updatePlayersList() {
   });
 }
 
-// Show results screen with final scores
+// Show results screen with final scores and trigger end animation
 function showResults(data) {
   gameActive = false;
-  gameScreen.classList.add('hidden');
-  resultsScreen.classList.remove('hidden');
   
-  // Display winner
-  if (data.winner) {
-    winnerNameElement.textContent = data.winner.name;
-    winnerPressesElement.textContent = `${data.winner.keyPresses} key presses`;
-  } else {
-    winnerNameElement.textContent = 'No winner';
-    winnerPressesElement.textContent = '';
+  // Start end animation
+  isEndAnimation = true;
+  endAnimationStartTime = Date.now();
+  
+  // Set all balloons to be visible, will hide some during animation
+  Object.keys(balloons).forEach(id => {
+    if (balloons[id] && balloons[id].balloon) {
+      balloons[id].balloon.visible = true;
+    }
+  });
+  
+  // Play confetti for the winner
+  if (data.winner && data.winner.id === socket.id) {
+    playWinnerConfetti();
+  } else if (data.winner) {
+    playSmallConfetti();
   }
   
-  // Display all players results
-  allPlayersResultsElement.innerHTML = '';
-  
-  // Sort players by key presses (highest first)
-  const sortedPlayers = Object.values(data.players).sort((a, b) => b.keyPresses - a.keyPresses);
-  
-  sortedPlayers.forEach(player => {
-    const playerResult = document.createElement('div');
-    playerResult.className = 'player-result';
+  // Show the results screen after the animation
+  setTimeout(() => {
+    gameScreen.classList.add('hidden');
+    resultsScreen.classList.remove('hidden');
     
-    const playerName = document.createElement('div');
-    playerName.className = 'player-name';
-    playerName.textContent = player.name;
+    // Display winner
+    if (data.winner) {
+      winnerNameElement.textContent = data.winner.name;
+      winnerPressesElement.textContent = `${data.winner.keyPresses} key presses`;
+    } else {
+      winnerNameElement.textContent = 'No winner';
+      winnerPressesElement.textContent = '';
+    }
     
-    const playerPresses = document.createElement('div');
-    playerPresses.className = 'player-presses';
-    playerPresses.textContent = `${player.keyPresses} presses`;
+    // Display all players results
+    allPlayersResultsElement.innerHTML = '';
     
-    playerResult.appendChild(playerName);
-    playerResult.appendChild(playerPresses);
-    allPlayersResultsElement.appendChild(playerResult);
+    // Sort players by key presses (highest first)
+    const sortedPlayers = Object.values(data.players).sort((a, b) => b.keyPresses - a.keyPresses);
+    
+    sortedPlayers.forEach(player => {
+      const playerResult = document.createElement('div');
+      playerResult.className = 'player-result';
+      
+      const playerName = document.createElement('div');
+      playerName.className = 'player-name';
+      playerName.textContent = player.name;
+      
+      const playerPresses = document.createElement('div');
+      playerPresses.className = 'player-presses';
+      playerPresses.textContent = `${player.keyPresses} presses`;
+      
+      playerResult.appendChild(playerName);
+      playerResult.appendChild(playerPresses);
+      allPlayersResultsElement.appendChild(playerResult);
+    });
+  }, endAnimationDuration);
+}
+
+// Play winner confetti
+function playWinnerConfetti() {
+  const duration = 5 * 1000;
+  const animationEnd = Date.now() + duration;
+  const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+  function randomInRange(min, max) {
+    return Math.random() * (max - min) + min;
+  }
+
+  const interval = setInterval(function() {
+    const timeLeft = animationEnd - Date.now();
+
+    if (timeLeft <= 0) {
+      return clearInterval(interval);
+    }
+
+    const particleCount = 50 * (timeLeft / duration);
+    
+    // Create bursts of confetti
+    confetti({
+      ...defaults,
+      particleCount,
+      origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
+    });
+    confetti({
+      ...defaults,
+      particleCount,
+      origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
+    });
+  }, 250);
+}
+
+// Play smaller confetti for non-winners
+function playSmallConfetti() {
+  confetti({
+    particleCount: 100,
+    spread: 70,
+    origin: { y: 0.6 }
   });
 }
 
