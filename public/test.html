@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+        }
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        #status {
+            padding: 10px;
+            border: 1px solid #ccc;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Balloon Battle Game - Connection Test</h1>
+    <div id="status">Testing connection...</div>
+    <p>If you see a success message, your browser can connect to the server.</p>
+    <p>Try the main game at: <a href="/">Balloon Battle Game</a></p>
+
+    <div>
+        <h2>Troubleshooting Steps:</h2>
+        <ol>
+            <li>Make sure you're accessing exactly <code>http://localhost:3001</code> (not https)</li>
+            <li>Try a different browser (Chrome, Firefox, Safari)</li>
+            <li>Try an incognito/private window</li>
+            <li>Check your browser's console for error messages (F12 or right-click > Inspect > Console)</li>
+        </ol>
+    </div>
+
+    <script>
+        // Simple fetch test
+        fetch('/api/status')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('status').innerHTML = 
+                    `<span class="success">SUCCESS: Connected to server!</span><br>
+                     Server response: ${JSON.stringify(data)}`;
+            })
+            .catch(error => {
+                document.getElementById('status').innerHTML = 
+                    `<span class="error">ERROR: Failed to connect to server</span><br>
+                     Error message: ${error.message}`;
+            });
+    </script>
+</body>
+</html> 
