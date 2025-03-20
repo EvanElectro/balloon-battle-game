@@ -38,12 +38,84 @@ let players = {};
 let localPlayer = null;
 let gameActive = false;
 let scene, camera, renderer;
-let balloons = {};
+let nuts = {}; // renamed from balloons to nuts
 let remainingTime = 30;
 let keyStates = {}; // Track key states to prevent holding
 let isEndAnimation = false;
 let endAnimationStartTime = 0;
 let endAnimationDuration = 5000; // 5 seconds for the final animation
+let nutTextures = {}; // Store loaded textures
+let burstParticles = []; // Store particle systems for bursting nuts
+let targetPresses = 100; // Default, will be updated from server
+
+// Preload textures
+function preloadTextures() {
+  const textureLoader = new THREE.TextureLoader();
+  const nutTypes = ['almond', 'peanut', 'walnut', 'pistachio', 'cashew', 'hazelnut'];
+  
+  nutTypes.forEach(type => {
+    // Load simple colored textures for nuts
+    // In a production version, you'd have actual texture images
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.width = 512;
+    canvas.height = 512;
+    
+    // Generate different colors for different nut types
+    let color;
+    switch(type) {
+      case 'almond': color = '#D2B48C'; break;
+      case 'peanut': color = '#CD853F'; break;
+      case 'walnut': color = '#8B4513'; break;
+      case 'pistachio': color = '#B1907F'; break;
+      case 'cashew': color = '#E0C9A6'; break;
+      case 'hazelnut': color = '#A0522D'; break;
+      default: color = '#D2B48C';
+    }
+    
+    // Fill background
+    context.fillStyle = color;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Add texture pattern
+    context.fillStyle = adjustColorBrightness(color, -20);
+    for (let i = 0; i < 20; i++) {
+      const x = Math.random() * canvas.width;
+      const y = Math.random() * canvas.height;
+      const size = 5 + Math.random() * 40;
+      context.beginPath();
+      context.ellipse(x, y, size, size/2, Math.random() * Math.PI, 0, Math.PI * 2);
+      context.fill();
+    }
+    
+    // Create texture from canvas
+    const texture = new THREE.CanvasTexture(canvas);
+    nutTextures[type] = texture;
+  });
+}
+
+// Helper to adjust color brightness
+function adjustColorBrightness(col, amt) {
+  let usePound = false;
+  if (col[0] == "#") {
+    col = col.slice(1);
+    usePound = true;
+  }
+  
+  let R = parseInt(col.substring(0, 2), 16);
+  let G = parseInt(col.substring(2, 4), 16);
+  let B = parseInt(col.substring(4, 6), 16);
+  
+  R = Math.max(0, Math.min(255, R + amt));
+  G = Math.max(0, Math.min(255, G + amt));
+  B = Math.max(0, Math.min(255, B + amt));
+  
+  return (usePound ? "#" : "") + (
+    (R.toString(16).length === 1 ? "0" + R.toString(16) : R.toString(16)) +
+    (G.toString(16).length === 1 ? "0" + G.toString(16) : G.toString(16)) +
+    (B.toString(16).length === 1 ? "0" + B.toString(16) : B.toString(16))
+  );
+}
 
 // Three.js scene setup
 function setupScene() {
@@ -87,55 +159,64 @@ function setupScene() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
   });
+
+  // Preload textures
+  preloadTextures();
 }
 
-// Create a balloon for a player
-function createBalloon(playerId, playerData) {
-  // Create balloon geometry
-  const balloonGeometry = new THREE.SphereGeometry(1, 32, 32);
+// Create a nut for a player
+function createNut(playerId, playerData) {
+  // Create nut geometry - use slightly deformed sphere for nut shape
+  const nutGeometry = new THREE.SphereGeometry(1, 32, 16);
   
-  // Generate a unique color for the player based on their id
-  const hue = Math.abs(hashCode(playerId) % 360) / 360;
-  const color = new THREE.Color().setHSL(hue, 0.8, 0.6);
+  // Deform geometry slightly to make it more nut-like
+  const vertices = nutGeometry.attributes.position;
+  for (let i = 0; i < vertices.count; i++) {
+    const x = vertices.getX(i);
+    const y = vertices.getY(i);
+    const z = vertices.getZ(i);
+    
+    // Apply a slight deformation to make it less perfectly spherical
+    vertices.setX(i, x * (1 + Math.sin(y * 4) * 0.1));
+    vertices.setZ(i, z * (1 + Math.cos(y * 3) * 0.1));
+  }
   
-  // Create balloon material
-  const balloonMaterial = new THREE.MeshPhongMaterial({ 
-    color: color,
-    specular: 0x111111,
+  // Get the assigned nut type or default to almond
+  const nutType = playerData.nutType || 'almond';
+  
+  // Create nut material using the preloaded texture
+  const nutMaterial = new THREE.MeshPhongMaterial({
+    map: nutTextures[nutType],
+    specular: 0x333333,
     shininess: 30,
-    emissive: color.clone().multiplyScalar(0.2)
+    bumpScale: 0.2
   });
   
-  // Create balloon mesh
-  const balloon = new THREE.Mesh(balloonGeometry, balloonMaterial);
+  // Create nut mesh
+  const nut = new THREE.Mesh(nutGeometry, nutMaterial);
   
-  // Position the balloon
+  // Position the nut
   const position = getPositionForPlayer(playerId);
-  balloon.position.set(position.x, position.y, position.z);
-  
-  // Add string to the balloon
-  const stringGeometry = new THREE.CylinderGeometry(0.05, 0.05, 3, 8);
-  const stringMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  const string = new THREE.Mesh(stringGeometry, stringMaterial);
-  string.position.y = -1.5;
-  balloon.add(string);
+  nut.position.set(position.x, position.y, position.z);
   
   // Add text label
-  addPlayerLabel(balloon, playerData.name);
+  addPlayerLabel(nut, playerData.name);
   
-  // Add to scene and store in balloons object
-  scene.add(balloon);
-  balloons[playerId] = {
-    balloon: balloon,
+  // Add to scene and store in nuts object
+  scene.add(nut);
+  nuts[playerId] = {
+    nut: nut,
     initialScale: 1,
-    targetScale: 1
+    targetScale: 1,
+    nutType: nutType,
+    hasBurst: false
   };
   
-  return balloon;
+  return nut;
 }
 
 // Add a label to display player name
-function addPlayerLabel(balloon, playerName) {
+function addPlayerLabel(nut, playerName) {
   // Create canvas for text
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
@@ -164,13 +245,13 @@ function addPlayerLabel(balloon, playerName) {
   sprite.scale.set(3, 1.5, 1);
   sprite.position.y = -4;
   
-  // Add sprite to balloon
-  balloon.add(sprite);
+  // Add sprite to nut
+  nut.add(sprite);
   
   return sprite;
 }
 
-// Get a position for a player's balloon
+// Get a position for a player's nut
 function getPositionForPlayer(playerId) {
   // Generate a position based on player ID
   const hash = hashCode(playerId);
@@ -195,27 +276,164 @@ function hashCode(str) {
   return hash;
 }
 
-// Update balloon size based on key presses
-function updateBalloonSize(playerId, size) {
-  if (balloons[playerId]) {
-    balloons[playerId].targetScale = size;
+// Update nut size based on key presses
+function updateNutSize(playerId, size) {
+  if (nuts[playerId]) {
+    nuts[playerId].targetScale = size;
   }
+}
+
+// Create burst animation for a nut
+function burstNut(playerId) {
+  if (!nuts[playerId] || nuts[playerId].hasBurst) return;
+  
+  const nutObject = nuts[playerId];
+  nutObject.hasBurst = true;
+  
+  // Get current position of the nut
+  const position = nutObject.nut.position.clone();
+  
+  // Hide the original nut
+  nutObject.nut.visible = false;
+  
+  // Create particle system for bursting effect
+  const particleCount = 150;
+  const particleGeometry = new THREE.BufferGeometry();
+  const particlePositions = new Float32Array(particleCount * 3);
+  const particleSizes = new Float32Array(particleCount);
+  const particleColors = new Float32Array(particleCount * 3);
+  
+  // Assign random positions, sizes, and colors to particles
+  for (let i = 0; i < particleCount; i++) {
+    // Random position within a sphere
+    const angle1 = Math.random() * Math.PI * 2;
+    const angle2 = Math.random() * Math.PI;
+    const radius = 0.1 + Math.random() * 0.3;
+    
+    particlePositions[i * 3] = position.x + Math.sin(angle1) * Math.sin(angle2) * radius;
+    particlePositions[i * 3 + 1] = position.y + Math.cos(angle2) * radius;
+    particlePositions[i * 3 + 2] = position.z + Math.cos(angle1) * Math.sin(angle2) * radius;
+    
+    // Random size
+    particleSizes[i] = 0.05 + Math.random() * 0.15;
+    
+    // Use the nut's color for particles
+    const nutType = nutObject.nutType || 'almond';
+    let col;
+    switch(nutType) {
+      case 'almond': col = [0.82, 0.71, 0.55]; break;
+      case 'peanut': col = [0.80, 0.52, 0.25]; break;
+      case 'walnut': col = [0.55, 0.27, 0.07]; break;
+      case 'pistachio': col = [0.69, 0.56, 0.50]; break;
+      case 'cashew': col = [0.88, 0.79, 0.65]; break;
+      case 'hazelnut': col = [0.63, 0.32, 0.18]; break;
+      default: col = [0.82, 0.71, 0.55];
+    }
+    particleColors[i * 3] = col[0] * (0.8 + Math.random() * 0.4);
+    particleColors[i * 3 + 1] = col[1] * (0.8 + Math.random() * 0.4);
+    particleColors[i * 3 + 2] = col[2] * (0.8 + Math.random() * 0.4);
+  }
+  
+  particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+  particleGeometry.setAttribute('size', new THREE.BufferAttribute(particleSizes, 1));
+  particleGeometry.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
+  
+  // Create particle material
+  const particleMaterial = new THREE.PointsMaterial({
+    size: 0.1,
+    vertexColors: true,
+    transparent: true,
+    opacity: 1.0
+  });
+  
+  // Create particle system
+  const particleSystem = {
+    points: new THREE.Points(particleGeometry, particleMaterial),
+    velocities: [],
+    startTime: Date.now(),
+    playerId: playerId
+  };
+  
+  // Initialize velocities
+  for (let i = 0; i < particleCount; i++) {
+    const dirX = (particlePositions[i * 3] - position.x) * (2 + Math.random() * 3);
+    const dirY = (particlePositions[i * 3 + 1] - position.y) * (2 + Math.random() * 3);
+    const dirZ = (particlePositions[i * 3 + 2] - position.z) * (2 + Math.random() * 3);
+    
+    particleSystem.velocities.push({
+      x: dirX,
+      y: dirY, 
+      z: dirZ
+    });
+  }
+  
+  scene.add(particleSystem.points);
+  burstParticles.push(particleSystem);
+  
+  // Play sound effect
+  playBurstSound();
+  
+  // If this is the winner, show extra effects
+  if (players[playerId] && players[playerId].isWinner) {
+    playWinnerConfetti();
+  } else {
+    playSmallConfetti();
+  }
+}
+
+// Play a burst sound effect
+function playBurstSound() {
+  // In a production version, you'd load and play an actual sound
+  console.log("Nut burst sound effect would play here");
 }
 
 // Animate the scene
 function animate() {
   requestAnimationFrame(animate);
   
+  // Update burst particle systems
+  const now = Date.now();
+  
+  for (let i = burstParticles.length - 1; i >= 0; i--) {
+    const system = burstParticles[i];
+    const positions = system.points.geometry.attributes.position.array;
+    const sizes = system.points.geometry.attributes.size.array;
+    const elapsed = (now - system.startTime) / 1000; // seconds
+    
+    // Remove old systems
+    if (elapsed > 3) {
+      scene.remove(system.points);
+      burstParticles.splice(i, 1);
+      continue;
+    }
+    
+    // Update particle positions based on velocity and gravity
+    for (let j = 0; j < positions.length / 3; j++) {
+      positions[j * 3] += system.velocities[j].x * 0.01;
+      positions[j * 3 + 1] += system.velocities[j].y * 0.01 - 0.015; // Add gravity
+      positions[j * 3 + 2] += system.velocities[j].z * 0.01;
+      
+      // Fade out particles over time
+      sizes[j] = Math.max(0, sizes[j] - 0.001);
+    }
+    
+    system.points.geometry.attributes.position.needsUpdate = true;
+    system.points.geometry.attributes.size.needsUpdate = true;
+    
+    // Fade out the material
+    system.points.material.opacity = Math.max(0, 1 - elapsed / 3);
+  }
+  
   if (isEndAnimation) {
-    // End game animation with floating balloons
+    // End game animation with floating nuts
     const progress = Math.min((Date.now() - endAnimationStartTime) / endAnimationDuration, 1);
     
-    Object.keys(balloons).forEach(playerId => {
-      const balloonData = balloons[playerId];
+    Object.keys(nuts).forEach(playerId => {
+      const nutData = nuts[playerId];
       const player = players[playerId];
       
-      if (player && player.finalHeight) {
-        // Balloon movement based on key presses and time
+      if (player && player.finalHeight && !nutData.hasBurst) {
+        // Nut movement based on key presses and time
         const targetHeight = player.finalHeight * progress;
         
         // Apply slight random movement for natural floating effect
@@ -223,49 +441,58 @@ function animate() {
         const playerId_num = parseInt(playerId.replace(/\D/g,''), 10) || 0;
         const offset = playerId_num * 0.1;
         
-        // Position balloon based on animation progress
-        balloonData.balloon.position.y = targetHeight + Math.sin(time + offset) * 0.2;
+        // Position nut based on animation progress
+        nutData.nut.position.y = targetHeight + Math.sin(time + offset) * 0.2;
         
         // Add slight swaying
-        balloonData.balloon.rotation.z = Math.sin(time * 0.5 + offset) * 0.1;
+        nutData.nut.rotation.z = Math.sin(time * 0.5 + offset) * 0.1;
         
-        // Make balloons with fewer presses "pop" and disappear
-        if (progress > 0.4 && player.finalHeight < player.finalHeight * 0.4) {
-          if (balloonData.balloon.visible) {
-            balloonData.balloon.visible = false;
-            // Add a popping sound or effect here if desired
-          }
+        // Burst nuts when they reach a certain height
+        if (progress > 0.7 && player.isWinner && !nutData.hasBurst) {
+          burstNut(playerId);
         }
       }
     });
     
-    // Slowly rotate camera around to show all balloons
+    // Slowly rotate camera around to show all nuts
     const cameraAngle = progress * Math.PI * 2;
-    const cameraRadius = 15 + progress * 5; // Camera moves slightly out as animation progresses
+    const cameraRadius = 15 + progress * 5;
     camera.position.x = Math.cos(cameraAngle) * cameraRadius;
     camera.position.z = Math.sin(cameraAngle) * cameraRadius;
-    camera.position.y = 5 + progress * 5; // Camera moves up slightly
-    camera.lookAt(0, progress * 10, 0); // Look at center, but higher as animation progresses
+    camera.position.y = 5 + progress * 5;
+    camera.lookAt(0, progress * 10, 0);
   } else {
     // Normal game animation
-    Object.keys(balloons).forEach(playerId => {
-      const balloonData = balloons[playerId];
+    Object.keys(nuts).forEach(playerId => {
+      const nutData = nuts[playerId];
+      
+      // Skip if the nut has burst
+      if (nutData.hasBurst) return;
       
       // Smoothly interpolate to target scale
-      balloonData.initialScale += (balloonData.targetScale - balloonData.initialScale) * 0.1;
+      nutData.initialScale += (nutData.targetScale - nutData.initialScale) * 0.1;
       
-      // Update balloon scale
-      balloonData.balloon.scale.set(
-        balloonData.initialScale,
-        balloonData.initialScale,
-        balloonData.initialScale
+      // Update nut scale
+      nutData.nut.scale.set(
+        nutData.initialScale,
+        nutData.initialScale,
+        nutData.initialScale
       );
       
       // Gently bob up and down
       const time = Date.now() * 0.001;
       const playerId_num = parseInt(playerId.replace(/\D/g,''), 10) || 0;
       const offset = playerId_num * 0.1;
-      balloonData.balloon.position.y = Math.sin(time + offset) * 0.2;
+      nutData.nut.position.y = Math.sin(time + offset) * 0.2;
+      
+      // Rotate the nut slowly for visual interest
+      nutData.nut.rotation.x = Math.sin(time * 0.3) * 0.1;
+      nutData.nut.rotation.z = Math.cos(time * 0.2) * 0.1;
+      
+      // Check if this nut should burst during gameplay
+      if (gameActive && players[playerId] && players[playerId].keyPresses >= targetPresses && !nutData.hasBurst) {
+        burstNut(playerId);
+      }
     });
   }
   
@@ -288,23 +515,32 @@ function updatePlayersList() {
 function showResults(data) {
   gameActive = false;
   
+  // Mark the winner for special effects
+  if (data.winner) {
+    Object.keys(players).forEach(id => {
+      players[id].isWinner = (id === data.winner.id);
+    });
+  }
+  
   // Start end animation
   isEndAnimation = true;
   endAnimationStartTime = Date.now();
   
-  // Set all balloons to be visible, will hide some during animation
-  Object.keys(balloons).forEach(id => {
-    if (balloons[id] && balloons[id].balloon) {
-      balloons[id].balloon.visible = true;
+  // Handle target reached scenario
+  if (data.targetReached) {
+    // If a player reached the target, their nut should burst immediately
+    const winnerId = data.winner ? data.winner.id : null;
+    if (winnerId && nuts[winnerId] && !nuts[winnerId].hasBurst) {
+      burstNut(winnerId);
+    }
+  }
+  
+  // Set all nuts to be visible
+  Object.keys(nuts).forEach(id => {
+    if (nuts[id] && nuts[id].nut && !nuts[id].hasBurst) {
+      nuts[id].nut.visible = true;
     }
   });
-  
-  // Play confetti for the winner
-  if (data.winner && data.winner.id === socket.id) {
-    playWinnerConfetti();
-  } else if (data.winner) {
-    playSmallConfetti();
-  }
   
   // Show the results screen after the animation
   setTimeout(() => {
@@ -315,6 +551,17 @@ function showResults(data) {
     if (data.winner) {
       winnerNameElement.textContent = data.winner.name;
       winnerPressesElement.textContent = `${data.winner.keyPresses} key presses`;
+      
+      // Add a note about winning condition
+      const winCondition = document.createElement('div');
+      winCondition.className = 'win-condition';
+      if (data.targetReached) {
+        winCondition.textContent = 'Successfully burst their nut first!';
+      } else {
+        winCondition.textContent = 'Had the most key presses when time ran out!';
+      }
+      winnerPressesElement.appendChild(document.createElement('br'));
+      winnerPressesElement.appendChild(winCondition);
     } else {
       winnerNameElement.textContent = 'No winner';
       winnerPressesElement.textContent = '';
@@ -330,6 +577,12 @@ function showResults(data) {
       const playerResult = document.createElement('div');
       playerResult.className = 'player-result';
       
+      // Add nut type information
+      const nutTypeDisplay = document.createElement('div');
+      nutTypeDisplay.className = 'nut-type';
+      nutTypeDisplay.textContent = player.nutType ? 
+        player.nutType.charAt(0).toUpperCase() + player.nutType.slice(1) : 'Nut';
+      
       const playerName = document.createElement('div');
       playerName.className = 'player-name';
       playerName.textContent = player.name;
@@ -338,6 +591,16 @@ function showResults(data) {
       playerPresses.className = 'player-presses';
       playerPresses.textContent = `${player.keyPresses} presses`;
       
+      // Add burst status if applicable
+      if (player.hasBurst || player.keyPresses >= targetPresses) {
+        const burstBadge = document.createElement('span');
+        burstBadge.className = 'burst-badge';
+        burstBadge.textContent = '💥 BURST!';
+        playerPresses.appendChild(document.createElement('br'));
+        playerPresses.appendChild(burstBadge);
+      }
+      
+      playerResult.appendChild(nutTypeDisplay);
       playerResult.appendChild(playerName);
       playerResult.appendChild(playerPresses);
       allPlayersResultsElement.appendChild(playerResult);
@@ -456,7 +719,7 @@ socket.on('connect', () => {
     menuScreen.classList.remove('hidden');
   });
   
-  // Handle key events for balloon inflation
+  // Handle key events for nut bursting
   window.addEventListener('keydown', handleKeyPress);
   window.addEventListener('keyup', handleKeyRelease);
   
@@ -477,16 +740,16 @@ socket.on('newPlayer', (playerData) => {
 
 socket.on('updatePlayer', (playerData) => {
   players[playerData.id] = playerData;
-  updateBalloonSize(playerData.id, playerData.balloonSize);
+  updateNutSize(playerData.id, playerData.balloonSize);
 });
 
 socket.on('playerDisconnected', (playerId) => {
   delete players[playerId];
   
-  // Remove balloon if it exists
-  if (balloons[playerId]) {
-    scene.remove(balloons[playerId].balloon);
-    delete balloons[playerId];
+  // Remove nut if it exists
+  if (nuts[playerId]) {
+    scene.remove(nuts[playerId].nut);
+    delete nuts[playerId];
   }
   
   updatePlayersList();
@@ -501,26 +764,42 @@ socket.on('gameStarted', (gameState) => {
   // Set game as active
   gameActive = true;
   
+  // Update target presses from server
+  if (gameState.targetPresses) {
+    targetPresses = gameState.targetPresses;
+  }
+  
   // Set up the 3D scene if not already done
   if (!scene) {
     setupScene();
     animate();
   }
   
-  // Clear existing balloons
-  Object.keys(balloons).forEach(id => {
-    scene.remove(balloons[id].balloon);
+  // Clear existing nuts
+  Object.keys(nuts).forEach(id => {
+    scene.remove(nuts[id].nut);
   });
-  balloons = {};
+  nuts = {};
   
-  // Create balloons for each player
+  // Create nuts for each player
   Object.keys(players).forEach(id => {
-    createBalloon(id, players[id]);
+    createNut(id, players[id]);
   });
+  
+  // Clear any existing burst particles
+  for (let i = burstParticles.length - 1; i >= 0; i--) {
+    scene.remove(burstParticles[i].points);
+  }
+  burstParticles = [];
   
   // Set up timer
   remainingTime = gameState.duration / 1000;
   updateTimer(remainingTime);
+  
+  // Update game instructions
+  document.querySelector('#instructions h3').textContent = 'TAP ANY KEY TO BURST YOUR NUT!';
+  document.querySelector('#instructions p').textContent = 
+    `First to ${targetPresses} key presses bursts their nut and wins! Most presses after 30 seconds also wins.`;
   
   // Start countdown
   const timerInterval = setInterval(() => {

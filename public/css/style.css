@@ -186,6 +186,45 @@ button:hover {
   font-size: 1.1rem;
 }
 
+/* Nut type display */
+.nut-type {
+  background-color: rgba(255, 87, 34, 0.4);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 5px;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Burst badge for player results */
+.burst-badge {
+  display: inline-block;
+  background-color: #FF5722;
+  color: white;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  margin-top: 5px;
+  animation: pulse 1s infinite;
+}
+
+/* Win condition text */
+.win-condition {
+  font-size: 1rem;
+  color: white;
+  margin-top: 5px;
+  font-style: italic;
+}
+
+/* Pulse animation for burst badge */
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
 /* Animation for the winner announcement */
 @keyframes float-up {
   0% { transform: translateY(0); }
@@ -224,4 +263,11 @@ canvas.confetti-canvas {
   animation: fade-in 0.5s ease-in;
   max-width: 600px;
   width: 90%;
+}
+
+/* Burst animation */
+@keyframes burst {
+  0% { transform: scale(1); opacity: 1; }
+  20% { transform: scale(1.5); opacity: 0.8; }
+  100% { transform: scale(2); opacity: 0; }
 } 

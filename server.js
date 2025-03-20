@@ -27,6 +27,7 @@ const gameState = {
   isActive: false,
   startTime: null,
   duration: 30000, // 30 seconds in milliseconds
+  targetPresses: 100, // Number of presses needed to burst the nut and win
 };
 
 // Track last key press time for each player to prevent key holding
@@ -44,6 +45,7 @@ io.on('connection', (socket) => {
     keyPresses: 0,
     balloonSize: 1,
     finalHeight: 0, // Add a property for final height
+    nutType: assignNutType(socket.id), // Assign a random nut type to each player
   };
 
   // Send current players to the new player
@@ -62,6 +64,12 @@ io.on('connection', (socket) => {
         players[socket.id].balloonSize = calculateBalloonSize(players[socket.id].keyPresses);
         lastKeyPressTime[socket.id] = now;
         io.emit('updatePlayer', players[socket.id]);
+        
+        // Check if player has reached the target presses to win
+        if (players[socket.id].keyPresses >= gameState.targetPresses) {
+          // End the game early with this player as winner
+          endGame(socket.id);
+        }
       }
     }
   });
@@ -79,7 +87,8 @@ io.on('connection', (socket) => {
       Object.keys(players).forEach(id => {
         players[id].keyPresses = 0;
         players[id].balloonSize = 1;
-        players[id].finalHeight = 0; // Add a property for final height
+        players[id].finalHeight = 0;
+        players[id].nutType = assignNutType(id); // Assign a random nut type to each player
       });
       
       gameState.isActive = true;
@@ -87,53 +96,9 @@ io.on('connection', (socket) => {
       
       io.emit('gameStarted', gameState);
       
-      // End game after duration
-      setTimeout(() => {
-        gameState.isActive = false;
-        const winner = findWinner();
-        
-        // Calculate final heights based on key presses (relative to winner)
-        const maxPresses = winner ? winner.keyPresses : 0;
-        
-        // Identify inactive players to remove
-        const inactivePlayers = [];
-        
-        Object.keys(players).forEach(id => {
-          // Calculate height based on relative performance
-          const relativePresses = maxPresses > 0 ? players[id].keyPresses / maxPresses : 0;
-          players[id].finalHeight = relativePresses * 20; // Max height is 20 units
-          
-          // Mark players with zero key presses as inactive
-          if (players[id].keyPresses === 0) {
-            inactivePlayers.push(id);
-          }
-        });
-        
-        // Send game ended event first
-        io.emit('gameEnded', { winner, players });
-        
-        // Remove inactive players after a short delay
-        setTimeout(() => {
-          inactivePlayers.forEach(id => {
-            if (players[id]) {
-              console.log(`Removing inactive player: ${players[id].name} (${id})`);
-              
-              // Notify the player they're being removed
-              io.to(id).emit('kickedForInactivity');
-              
-              // Remove the player
-              delete players[id];
-              
-              // Notify all remaining players
-              io.emit('playerDisconnected', id);
-            }
-          });
-          
-          // Log the number of players removed
-          if (inactivePlayers.length > 0) {
-            console.log(`Removed ${inactivePlayers.length} inactive player(s)`);
-          }
-        }, endAnimationDelay);
+      // End game after duration if no one reaches target
+      gameState.timeoutId = setTimeout(() => {
+        endGame();
       }, gameState.duration);
     }
   });
@@ -146,10 +111,73 @@ io.on('connection', (socket) => {
   });
 });
 
-// Calculate balloon size based on key presses
-function calculateBalloonSize(keyPresses) {
-  // Base size + slower incremental growth based on key presses
-  return 1 + (keyPresses * 0.05); // Reduced from 0.1 to 0.05 for slower inflation
+// Function to end the game, with optional winnerId
+function endGame(winnerId = null) {
+  // Only proceed if game is active
+  if (!gameState.isActive) return;
+  
+  // Clear the game timeout if it exists
+  if (gameState.timeoutId) {
+    clearTimeout(gameState.timeoutId);
+    gameState.timeoutId = null;
+  }
+  
+  gameState.isActive = false;
+  
+  // Find the winner (either provided or highest score)
+  let winner = null;
+  if (winnerId && players[winnerId]) {
+    winner = players[winnerId];
+  } else {
+    winner = findWinner();
+  }
+  
+  // Calculate final heights based on key presses (relative to winner or target)
+  const maxPresses = winner ? winner.keyPresses : 0;
+  const referencePresses = Math.max(maxPresses, gameState.targetPresses * 0.7); // Use at least 70% of target
+  
+  // Identify inactive players to remove
+  const inactivePlayers = [];
+  
+  Object.keys(players).forEach(id => {
+    // Calculate height based on relative performance
+    const relativePresses = referencePresses > 0 ? players[id].keyPresses / referencePresses : 0;
+    players[id].finalHeight = relativePresses * 20; // Max height is 20 units
+    
+    // Track burst status
+    players[id].hasBurst = players[id].keyPresses >= gameState.targetPresses;
+    
+    // Mark players with zero key presses as inactive
+    if (players[id].keyPresses === 0) {
+      inactivePlayers.push(id);
+    }
+  });
+  
+  // Send game ended event first
+  io.emit('gameEnded', { winner, players, targetReached: winner ? winner.keyPresses >= gameState.targetPresses : false });
+  
+  // Remove inactive players after a short delay
+  setTimeout(() => {
+    inactivePlayers.forEach(id => {
+      if (players[id]) {
+        console.log(`Removing inactive player: ${players[id].name} (${id})`);
+        
+        // Notify the player they're being removed
+        io.to(id).emit('kickedForInactivity');
+        
+        // Remove the player
+        delete players[id];
+        
+        // Notify all remaining players
+        io.emit('playerDisconnected', id);
+      }
+    });
+    
+    // Log the number of players removed
+    if (inactivePlayers.length > 0) {
+      console.log(`Removed ${inactivePlayers.length} inactive player(s)`);
+    }
+  }, endAnimationDelay);
 }
 
 // Find the winner of the game
@@ -165,6 +193,32 @@ function findWinner() {
   });
   
   return winnerId ? players[winnerId] : null;
+}
+
+// Assign a random nut type to a player
+function assignNutType(playerId) {
+  const nutTypes = ['almond', 'peanut', 'walnut', 'pistachio', 'cashew', 'hazelnut'];
+  // Use the player ID to deterministically choose a nut type
+  const index = Math.abs(hashCode(playerId)) % nutTypes.length;
+  return nutTypes[index];
+}
+
+// Simple hash function for strings (same as client)
+function hashCode(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash;
+}
+
+// Calculate balloon size based on key presses
+function calculateBalloonSize(keyPresses) {
+  // Base size + incremental growth based on key presses
+  // Scale to reach about 3x size at target presses
+  return 1 + (keyPresses / gameState.targetPresses) * 2;
 }
 
 // Start the server
