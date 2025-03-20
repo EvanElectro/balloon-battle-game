@@ -715,13 +715,11 @@ function handleTouchEnd(event) {
 socket.on('connect', () => {
   console.log('Connected to server');
   
-  // Set default player name
-  playerNameInput.value = `Player ${Math.floor(Math.random() * 1000)}`;
-  
-  // Set up local player
+  // Set up local player with blank name
   localPlayer = {
     id: socket.id,
-    name: playerNameInput.value
+    name: '',
+    nutType: 'almond' // Default nut type
   };
   
   // Set up event listeners
@@ -730,7 +728,21 @@ socket.on('connect', () => {
     socket.emit('updateName', playerNameInput.value);
   });
   
+  // Handle nut type selection
+  const nutTypeSelect = document.getElementById('nut-type');
+  if (nutTypeSelect) {
+    nutTypeSelect.addEventListener('change', () => {
+      localPlayer.nutType = nutTypeSelect.value;
+      socket.emit('updateNutType', nutTypeSelect.value);
+    });
+  }
+  
   startButton.addEventListener('click', () => {
+    // Check if player has entered a name
+    if (!playerNameInput.value.trim()) {
+      alert('Please enter your name to start');
+      return;
+    }
     socket.emit('startGame');
   });
   
@@ -803,6 +815,10 @@ socket.on('gameStarted', (gameState) => {
   
   // Create nuts for each player
   Object.keys(players).forEach(id => {
+    // Make sure we preserve the nut type the player selected
+    if (id === socket.id && localPlayer && localPlayer.nutType) {
+      players[id].nutType = localPlayer.nutType;
+    }
     createNut(id, players[id]);
   });
   

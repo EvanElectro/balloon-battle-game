@@ -80,6 +80,15 @@ io.on('connection', (socket) => {
     io.emit('updatePlayer', players[socket.id]);
   });
 
+  // Handle nut type selection
+  socket.on('updateNutType', (nutType) => {
+    const validNutTypes = ['almond', 'peanut', 'walnut', 'pistachio', 'cashew', 'hazelnut'];
+    if (validNutTypes.includes(nutType)) {
+      players[socket.id].nutType = nutType;
+      io.emit('updatePlayer', players[socket.id]);
+    }
+  });
+
   // Handle game start request
   socket.on('startGame', () => {
     if (!gameState.isActive && Object.keys(players).length > 0) {
