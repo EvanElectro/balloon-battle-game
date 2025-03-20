@@ -120,6 +120,25 @@ button:hover {
   border-radius: 3px;
 }
 
+/* Player info in the player list */
+.player-info {
+  display: flex;
+  align-items: center;
+}
+
+.nut-indicator {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  margin-right: 10px;
+  border: 1px solid rgba(255,255,255,0.3);
+}
+
+.player-list-name {
+  flex-grow: 1;
+}
+
 #game-container {
   position: absolute;
   top: 0;

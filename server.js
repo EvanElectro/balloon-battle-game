@@ -94,10 +94,15 @@ io.on('connection', (socket) => {
     if (!gameState.isActive && Object.keys(players).length > 0) {
       // Reset all players' scores
       Object.keys(players).forEach(id => {
+        // Store the current nut type before resetting
+        const currentNutType = players[id].nutType;
+        
         players[id].keyPresses = 0;
         players[id].balloonSize = 1;
         players[id].finalHeight = 0;
-        players[id].nutType = assignNutType(id); // Assign a random nut type to each player
+        
+        // Preserve the player's chosen nut type instead of assigning a new random one
+        players[id].nutType = currentNutType;
       });
       
       gameState.isActive = true;

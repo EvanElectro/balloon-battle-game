@@ -447,20 +447,27 @@ function animate() {
         // Add slight swaying
         nutData.nut.rotation.z = Math.sin(time * 0.5 + offset) * 0.1;
         
-        // Burst nuts when they reach a certain height
-        if (progress > 0.7 && player.isWinner && !nutData.hasBurst) {
+        // Burst all nuts at the end of the animation
+        if (progress > 0.8 && !nutData.hasBurst) {
           burstNut(playerId);
+          
+          // Show extra confetti for the winner
+          if (player.isWinner) {
+            playWinnerConfetti();
+          } else {
+            playSmallConfetti();
+          }
         }
       }
     });
     
-    // Slowly rotate camera around to show all nuts
+    // Slowly rotate and zoom out camera to show all nuts
     const cameraAngle = progress * Math.PI * 2;
-    const cameraRadius = 15 + progress * 5;
+    const cameraRadius = 15 + progress * 10; // Increased zoom out amount
     camera.position.x = Math.cos(cameraAngle) * cameraRadius;
     camera.position.z = Math.sin(cameraAngle) * cameraRadius;
-    camera.position.y = 5 + progress * 5;
-    camera.lookAt(0, progress * 10, 0);
+    camera.position.y = 5 + progress * 10; // Higher camera position to see all nuts
+    camera.lookAt(0, progress * 8, 0);
   } else {
     // Normal game animation
     Object.keys(nuts).forEach(playerId => {
@@ -526,9 +533,44 @@ function updatePlayersList() {
   
   Object.values(players).forEach(player => {
     const li = document.createElement('li');
-    li.textContent = player.name;
+    
+    // Create a container for the player info
+    const playerInfo = document.createElement('div');
+    playerInfo.className = 'player-info';
+    
+    // Show nut type with a color indicator
+    const nutType = player.nutType || 'almond';
+    const nutColor = getNutColor(nutType);
+    
+    const nutIndicator = document.createElement('span');
+    nutIndicator.className = 'nut-indicator';
+    nutIndicator.style.backgroundColor = nutColor;
+    nutIndicator.title = `${nutType.charAt(0).toUpperCase() + nutType.slice(1)}`;
+    
+    // Add player name
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'player-list-name';
+    nameSpan.textContent = player.name || 'Unnamed Player';
+    
+    // Add elements to the list item
+    playerInfo.appendChild(nutIndicator);
+    playerInfo.appendChild(nameSpan);
+    li.appendChild(playerInfo);
     playersListElement.appendChild(li);
   });
+}
+
+// Helper function to get color for nut type
+function getNutColor(nutType) {
+  switch(nutType) {
+    case 'almond': return '#D2B48C';
+    case 'peanut': return '#CD853F';
+    case 'walnut': return '#8B4513';
+    case 'pistachio': return '#B1907F';
+    case 'cashew': return '#E0C9A6';
+    case 'hazelnut': return '#A0522D';
+    default: return '#D2B48C';
+  }
 }
 
 // Show results screen with final scores and trigger end animation
@@ -773,6 +815,11 @@ socket.on('newPlayer', (playerData) => {
 socket.on('updatePlayer', (playerData) => {
   players[playerData.id] = playerData;
   updateNutSize(playerData.id, playerData.balloonSize);
+  
+  // Update the players list in the menu when player data changes
+  if (!gameActive) {
+    updatePlayersList();
+  }
 });
 
 socket.on('playerDisconnected', (playerId) => {
