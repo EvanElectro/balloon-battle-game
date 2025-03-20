@@ -94,13 +94,46 @@ io.on('connection', (socket) => {
         
         // Calculate final heights based on key presses (relative to winner)
         const maxPresses = winner ? winner.keyPresses : 0;
+        
+        // Identify inactive players to remove
+        const inactivePlayers = [];
+        
         Object.keys(players).forEach(id => {
           // Calculate height based on relative performance
           const relativePresses = maxPresses > 0 ? players[id].keyPresses / maxPresses : 0;
           players[id].finalHeight = relativePresses * 20; // Max height is 20 units
+          
+          // Mark players with zero key presses as inactive
+          if (players[id].keyPresses === 0) {
+            inactivePlayers.push(id);
+          }
         });
         
+        // Send game ended event first
         io.emit('gameEnded', { winner, players });
+        
+        // Remove inactive players after a short delay
+        setTimeout(() => {
+          inactivePlayers.forEach(id => {
+            if (players[id]) {
+              console.log(`Removing inactive player: ${players[id].name} (${id})`);
+              
+              // Notify the player they're being removed
+              io.to(id).emit('kickedForInactivity');
+              
+              // Remove the player
+              delete players[id];
+              
+              // Notify all remaining players
+              io.emit('playerDisconnected', id);
+            }
+          });
+          
+          // Log the number of players removed
+          if (inactivePlayers.length > 0) {
+            console.log(`Removed ${inactivePlayers.length} inactive player(s)`);
+          }
+        }, endAnimationDelay);
       }, gameState.duration);
     }
   });
@@ -136,6 +169,8 @@ function findWinner() {
 
 // Start the server
 const PORT = process.env.PORT || 8080;
+const endAnimationDelay = 5500; // Slightly longer than endAnimationDuration in client (5000ms)
+
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 }); 

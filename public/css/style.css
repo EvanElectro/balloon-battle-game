@@ -210,4 +210,18 @@ canvas.confetti-canvas {
   left: 0;
   z-index: 100;
   pointer-events: none;
+}
+
+/* Alert styles for inactivity message */
+.alert {
+  background-color: rgba(255, 87, 34, 0.8);
+  color: white;
+  padding: 15px;
+  border-radius: 5px;
+  margin-bottom: 20px;
+  text-align: center;
+  font-weight: bold;
+  animation: fade-in 0.5s ease-in;
+  max-width: 600px;
+  width: 90%;
 } 

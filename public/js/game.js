@@ -535,4 +535,33 @@ socket.on('gameStarted', (gameState) => {
 
 socket.on('gameEnded', (data) => {
   showResults(data);
+});
+
+// Handle being kicked for inactivity
+socket.on('kickedForInactivity', () => {
+  // Close the game screens if they're open
+  gameScreen.classList.add('hidden');
+  resultsScreen.classList.add('hidden');
+  
+  // Show the menu with an inactivity message
+  menuScreen.classList.remove('hidden');
+  
+  // Create or update an inactivity message
+  let inactivityMsg = document.getElementById('inactivity-message');
+  
+  if (!inactivityMsg) {
+    inactivityMsg = document.createElement('div');
+    inactivityMsg.id = 'inactivity-message';
+    inactivityMsg.className = 'alert';
+    menuScreen.insertBefore(inactivityMsg, menuScreen.firstChild);
+  }
+  
+  inactivityMsg.textContent = 'You were removed due to inactivity (0 key presses). Join again to play!';
+  
+  // Clear the message after 10 seconds
+  setTimeout(() => {
+    if (inactivityMsg && inactivityMsg.parentNode) {
+      inactivityMsg.parentNode.removeChild(inactivityMsg);
+    }
+  }, 10000);
 }); 
