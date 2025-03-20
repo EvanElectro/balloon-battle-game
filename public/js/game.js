@@ -494,6 +494,26 @@ function animate() {
         burstNut(playerId);
       }
     });
+    
+    // Focus camera on local player's nut if it exists
+    if (localPlayer && nuts[localPlayer.id] && !nuts[localPlayer.id].hasBurst) {
+      const playerNut = nuts[localPlayer.id].nut;
+      
+      // Calculate camera position to be behind and slightly above the player's nut
+      const idealDistance = 5; // Distance from the player's nut
+      const idealHeight = 3;   // Height above the player's nut
+      
+      // Use current position of player's nut
+      const targetPosition = playerNut.position.clone();
+      
+      // Set camera position
+      camera.position.x = targetPosition.x;
+      camera.position.z = targetPosition.z + idealDistance;
+      camera.position.y = targetPosition.y + idealHeight;
+      
+      // Look at the player's nut
+      camera.lookAt(targetPosition);
+    }
   }
   
   // Render the scene
@@ -797,9 +817,9 @@ socket.on('gameStarted', (gameState) => {
   updateTimer(remainingTime);
   
   // Update game instructions
-  document.querySelector('#instructions h3').textContent = 'TAP ANY KEY TO BURST YOUR NUT!';
+  document.querySelector('#instructions h3').textContent = 'TAP AS FAST AS YOU CAN TO BURST YOUR NUT!';
   document.querySelector('#instructions p').textContent = 
-    `First to ${targetPresses} key presses bursts their nut and wins! Most presses after 30 seconds also wins.`;
+    'Note: Holding keys doesn\'t work - you must tap!';
   
   // Start countdown
   const timerInterval = setInterval(() => {
