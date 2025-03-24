@@ -1,15 +1,15 @@
-# Balloon Battle
+# Nut Buster
 
-A 3D multiplayer browser game where players compete to inflate balloons. Button mashing at its finest!
+A 3D multiplayer browser game where players compete to bust their nut first. Button mashing at its finest!
 
 ## Multiplayer Lobby
 https://cut-fresh-indigo.glitch.me/
 
 ## Game Rules
 
-- Press any key as fast as you can to inflate your balloon
+- Press any key as fast as you can to inflate your nut of choise
 - The game lasts for 30 seconds
-- Most keypresses = biggest balloon = winner
+- Most keypresses = biggest nut = winner
 - Compete against friends in real-time
 
 ## Features
